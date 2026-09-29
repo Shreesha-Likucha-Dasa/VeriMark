@@ -1,0 +1,214 @@
+package com.verimark.app.ui
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.verimark.app.data.CaseWithMarkerCount
+import com.verimark.app.util.formatDate
+import com.verimark.app.util.takePersistableReadPermission
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProjectsListScreen(
+    onProjectClick: (Long) -> Unit,
+    viewModel: ProjectsListViewModel = viewModel()
+) {
+    val context = LocalContext.current
+    val projects by viewModel.projects.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    var showNewDialog by remember { mutableStateOf(false) }
+    var newTitle by remember { mutableStateOf("") }
+    var pickedVideo by remember { mutableStateOf<Uri?>(null) }
+    var deleteTarget by remember { mutableStateOf<CaseWithMarkerCount?>(null) }
+
+    val videoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            takePersistableReadPermission(context, uri)
+            pickedVideo = uri
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("VeriMark Projects") })
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showNewDialog = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "New Project")
+            }
+        }
+    ) { padding ->
+        if (projects.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("No projects yet. Tap + to create one.")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(projects, key = { it.case.id }) { item ->
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onProjectClick(item.case.id) },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    item.case.title,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "${formatDate(item.case.date)}  •  ${item.markerCount} marker(s)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = { deleteTarget = item }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete project")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showNewDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showNewDialog = false
+                pickedVideo = null
+            },
+            title = { Text("New Project") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newTitle,
+                        onValueChange = { newTitle = it },
+                        label = { Text("Project title") },
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = { videoPicker.launch(arrayOf("video/*")) }) {
+                        Text(
+                            if (pickedVideo == null) "Choose Video"
+                            else "Video selected — tap to change"
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = pickedVideo != null,
+                    onClick = {
+                        val uri = pickedVideo ?: return@TextButton
+                        scope.launch {
+                            val id = viewModel.createProject(newTitle, uri)
+                            showNewDialog = false
+                            newTitle = ""
+                            pickedVideo = null
+                            onProjectClick(id)
+                        }
+                    }
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showNewDialog = false
+                        pickedVideo = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Delete Project") },
+            text = { Text("Delete \"${target.case.title}\" and all its markers? This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteProject(target.case)
+                        deleteTarget = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}

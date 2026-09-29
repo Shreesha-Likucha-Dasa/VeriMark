@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+
+# Local configuration (machine-specific SDK path)
+local.properties
+
+# IDE / editor
+.idea/
+*.iml
+.kotlin/
+.vscode/
+
+# Build outputs
+*.apk
+*.aab
+captures/
+.cxx/
+
+# Misc
+.DS_Store

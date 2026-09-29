@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VeriMark Privacy Policy</title>
+  <style>
+    :root {
+      --ink: #1c1c1e;
+      --muted: #55555c;
+      --accent: #1b5e20;
+      --line: #e4e4e7;
+      --bg: #fafafa;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.65;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 { font-size: 1.9rem; margin: 0 0 4px; }
+    h2 { font-size: 1.2rem; margin: 2rem 0 0.5rem; color: var(--accent); }
+    p, li { color: var(--muted); }
+    .updated { font-size: 0.85rem; color: var(--muted); margin-bottom: 2rem; }
+    hr { border: none; border-top: 1px solid var(--line); margin: 2.5rem 0; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>VeriMark Privacy Policy</h1>
+    <p class="updated">Last updated: September 29, 2026</p>
+
+    <p>
+      VeriMark is a fully offline Android application for reviewing local videos, marking
+      incident timestamps with labels, and exporting PDF reports. This policy explains what
+      information the app handles and how it is stored.
+    </p>
+
+    <h2>1. Data we collect</h2>
+    <p>
+      VeriMark does <strong>not collect, transmit, or share any personal information</strong>.
+      The app does not include analytics, advertising, crash-reporting, or any other
+      third-party SDK, and it does not request the <code>INTERNET</code> permission.
+    </p>
+
+    <h2>2. Data stored on your device</h2>
+    <p>
+      All data you create is stored locally on your device and never leaves it:
+    </p>
+    <ul>
+      <li>Project names and creation dates.</li>
+      <li>Video file references (content URIs you select via the system file picker).</li>
+      <li>Incident markers: timestamps, labels, and creation times.</li>
+      <li>Exported PDF and JSON files, written to the app's private cache directory or to a location you choose.</li>
+    </ul>
+    <p>
+      This data is held in a local Room database and in the app's private storage. No data is
+      backed up to, or synchronized with, any server.
+    </p>
+
+    <h2>3. Permissions</h2>
+    <p>
+      VeriMark uses the Android Storage Access Framework to let you choose which videos to open.
+      When you select a video, the app requests a persistable read permission for that specific
+      file so access survives app restarts. The app does not request broad storage access and
+      does not read any file you have not explicitly selected.
+    </p>
+
+    <h2>4. Data retention and deletion</h2>
+    <p>
+      Data remains on your device until you delete it. You can delete individual markers, clear
+      all markers for a project, or delete an entire project (including its markers) at any time
+      from within the app. Uninstalling the app removes all locally stored data.
+    </p>
+
+    <h2>5. Third parties</h2>
+    <p>
+      VeriMark has no server backend and does not engage any third-party data processors.
+      Because the app is entirely offline, no data is ever shared with us or with anyone else.
+    </p>
+
+    <h2>6. Children&rsquo;s privacy</h2>
+    <p>
+      VeriMark is a professional tool intended for investigators and claims professionals.
+      It is not directed at children, and it does not knowingly collect information from anyone.
+    </p>
+
+    <h2>7. Changes to this policy</h2>
+    <p>
+      If this policy changes, the updated version will be published at this location with a new
+      &ldquo;Last updated&rdquo; date.
+    </p>
+
+    <h2>8. Contact</h2>
+    <p>
+      If you have questions about this privacy policy, please contact the app maintainer through
+      the project&rsquo;s GitHub repository.
+    </p>
+
+    <hr />
+    <p><a href="../">Back to project</a></p>
+  </main>
+</body>
+</html>
