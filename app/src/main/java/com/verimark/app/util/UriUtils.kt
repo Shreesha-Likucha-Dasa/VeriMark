@@ -49,3 +49,12 @@ fun detectMediaType(context: Context, uri: Uri): MediaType {
     val extension = name.substringAfterLast('.', "").lowercase()
     return if (extension in AUDIO_EXTENSIONS) MediaType.AUDIO else MediaType.VIDEO
 }
+
+/** Returns true if [uriString] is blank or can currently be opened for reading. */
+fun isUriAccessible(context: Context, uriString: String): Boolean {
+    if (uriString.isBlank()) return true
+    return runCatching {
+        context.contentResolver.openInputStream(Uri.parse(uriString))?.close()
+        true
+    }.getOrDefault(false)
+}

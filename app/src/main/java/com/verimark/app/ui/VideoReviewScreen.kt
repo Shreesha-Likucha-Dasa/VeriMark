@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,10 +66,15 @@ import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.ui.PlayerView
 import com.verimark.app.data.MediaType
 import com.verimark.app.data.ProjectBackup
+import com.verimark.app.portable.VeriMarkPackage
 import com.verimark.app.pdf.generatePdfReport
 import com.verimark.app.pdf.sharePdf
 import com.verimark.app.util.formatMs
+import com.verimark.app.util.isUriAccessible
+import com.verimark.app.util.readDisplayName
+import com.verimark.app.util.shareFile
 import com.verimark.app.util.takePersistableReadPermission
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
@@ -95,6 +101,9 @@ fun VideoReviewScreen(
     var capturedPositionMs by remember { mutableLongStateOf(0L) }
     var menuExpanded by remember { mutableStateOf(false) }
     var showClearAllDialog by remember { mutableStateOf(false) }
+    var showReplaceDialog by remember { mutableStateOf(false) }
+    var pendingReplacementUri by remember { mutableStateOf<Uri?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(caseId) {
         viewModel.loadCase(caseId)
@@ -135,7 +144,12 @@ fun VideoReviewScreen(
     ) { uri: Uri? ->
         if (uri != null) {
             takePersistableReadPermission(context, uri)
-            viewModel.setMediaForCurrentCase(uri)
+            if (markers.isNotEmpty()) {
+                pendingReplacementUri = uri
+                showReplaceDialog = true
+            } else {
+                viewModel.setMediaForCurrentCase(uri)
+            }
         }
     }
 
@@ -143,15 +157,31 @@ fun VideoReviewScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            val json = runCatching {
-                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-            }.getOrNull()
-            val backup = json?.let { ProjectBackup.fromJson(it) }
-            if (backup != null) {
-                viewModel.importBackup(backup)
-                Toast.makeText(context, "Project imported", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Import failed: invalid file", Toast.LENGTH_SHORT).show()
+            val name = readDisplayName(context, uri).orEmpty()
+            scope.launch {
+                if (name.endsWith(VeriMarkPackage.EXTENSION, ignoreCase = true)) {
+                    val result = runCatching { viewModel.importPackage(uri) }
+                    val message = result.getOrNull()?.let { "Project imported" }
+                        ?: ((result.exceptionOrNull() as? VeriMarkPackage.PackageException)?.message
+                            ?: "Import failed: invalid package")
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                } else {
+                    val json = runCatching {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    }.getOrNull()
+                    val backup = json?.let { ProjectBackup.fromJson(it) }
+                    if (backup != null) {
+                        val resolved = if (isUriAccessible(context, backup.videoUri)) backup.videoUri else null
+                        viewModel.importLegacyBackup(backup, resolved)
+                        if (resolved == null && backup.videoUri.isNotBlank()) {
+                            Toast.makeText(context, "Imported without recording — tap + to add it", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Project imported", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(context, "Import failed: invalid file", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
@@ -164,31 +194,37 @@ fun VideoReviewScreen(
         }
     }
 
-    var pendingExportJson by remember { mutableStateOf<String?>(null) }
-
-    val exportJsonPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
+    val exportPackagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
-        val json = pendingExportJson
-        pendingExportJson = null
-        if (uri != null && json != null) {
-            runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(json.toByteArray(Charsets.UTF_8))
-                }
-            }.onSuccess {
-                Toast.makeText(context, "Project exported", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
+        if (uri != null) {
+            scope.launch {
+                val result = runCatching { viewModel.exportPackage(uri) }
+                val message = result.getOrNull()?.let { if (it) "Project exported" else "Export failed" }
+                    ?: ((result.exceptionOrNull() as? VeriMarkPackage.PackageException)?.message
+                        ?: "Export failed")
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     val exportProject = {
-        val backup = viewModel.buildBackup()
-        if (backup != null) {
-            pendingExportJson = backup.toJson()
-            exportJsonPicker.launch("VeriMark_Case_${caseId}.json")
+        val currentCase = viewModel.currentCase.value
+        if (currentCase != null) {
+            exportPackagePicker.launch(
+                VeriMarkPackage.safeProjectFileName(currentCase.title) + VeriMarkPackage.EXTENSION
+            )
+        }
+    }
+
+    val shareProject = {
+        scope.launch {
+            val file = viewModel.buildPackageFileForSharing()
+            if (file != null) {
+                shareFile(context, file, "application/zip", "Share VeriMark Project")
+            } else {
+                Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -221,10 +257,17 @@ fun VideoReviewScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Export Project (.json)") },
+                                text = { Text("Export Project") },
                                 onClick = {
                                     menuExpanded = false
                                     exportProject()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share Project") },
+                                onClick = {
+                                    menuExpanded = false
+                                    shareProject()
                                 }
                             )
                             DropdownMenuItem(
@@ -232,7 +275,7 @@ fun VideoReviewScreen(
                                 onClick = {
                                     menuExpanded = false
                                     importPicker.launch(
-                                        arrayOf("application/json", "application/octet-stream", "text/*")
+                                        arrayOf("application/zip", "application/octet-stream", "application/json", "text/*", "*/*")
                                     )
                                 }
                             )
@@ -363,6 +406,38 @@ fun VideoReviewScreen(
                 }
             }
         }
+    }
+
+    if (showReplaceDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showReplaceDialog = false
+                pendingReplacementUri = null
+            },
+            title = { Text("Replace recording?") },
+            text = { Text("Existing markers are linked to the current recording and will be removed.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingReplacementUri?.let { viewModel.replaceMedia(it) }
+                        showReplaceDialog = false
+                        pendingReplacementUri = null
+                    }
+                ) {
+                    Text("Replace")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showReplaceDialog = false
+                        pendingReplacementUri = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showClearAllDialog) {

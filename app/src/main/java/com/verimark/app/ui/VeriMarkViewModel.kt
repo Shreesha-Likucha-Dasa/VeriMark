@@ -9,14 +9,18 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import com.verimark.app.data.CaseDao
 import com.verimark.app.data.CaseEntity
-import com.verimark.app.data.MarkerBackup
 import com.verimark.app.data.MarkerDao
 import com.verimark.app.data.MarkerEntity
 import com.verimark.app.data.MediaType
 import com.verimark.app.data.ProjectBackup
 import com.verimark.app.data.VeriMarkDatabase
+import com.verimark.app.portable.VeriMarkPackage
 import com.verimark.app.util.detectMediaType
+import com.verimark.app.util.readDisplayName
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -117,35 +121,29 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Builds a serializable snapshot of the current case and markers. */
-    fun buildBackup(): ProjectBackup? {
-        val case = _currentCase.value ?: return null
-        val uri = _selectedMediaUri.value ?: return null
-        return ProjectBackup(
-            caseTitle = case.title,
-            videoUri = uri.toString(),
-            mediaType = case.mediaType.name,
-            markers = markers.value.map { marker ->
-                MarkerBackup(
-                    videoUri = marker.videoUri,
-                    positionMs = marker.positionMs,
-                    label = marker.label,
-                    createdAt = marker.createdAt
-                )
-            }
-        )
+    /** Replaces the media for the current case, removing all existing markers. */
+    fun replaceMedia(uri: Uri) {
+        _selectedMediaUri.value = uri
+        val case = _currentCase.value ?: return
+        val mediaType = detectMediaType(getApplication(), uri)
+        viewModelScope.launch {
+            markerDao.clearAllMarkers(case.id)
+            caseDao.updateMedia(case.id, uri.toString(), mediaType)
+            _currentCase.value = case.copy(videoUri = uri.toString(), mediaType = mediaType)
+        }
     }
 
-    /** Restores a project from a backup, creating a new case with its markers. */
-    fun importBackup(backup: ProjectBackup) {
+    /** Imports a legacy metadata-only JSON backup. [resolvedMediaUri] may be blank if unavailable. */
+    fun importLegacyBackup(backup: ProjectBackup, resolvedMediaUri: String?) {
         viewModelScope.launch {
-            val title = backup.caseTitle.ifBlank { "Imported Case" }
+            val title = backup.caseTitle.ifBlank { "Imported Project" }
             val now = System.currentTimeMillis()
+            val uri = resolvedMediaUri.orEmpty()
             val caseId = caseDao.insert(
                 CaseEntity(
                     title = title,
                     date = now,
-                    videoUri = backup.videoUri,
+                    videoUri = uri,
                     mediaType = MediaType.fromStorage(backup.mediaType)
                 )
             )
@@ -154,7 +152,7 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
                     backup.markers.map { m ->
                         MarkerEntity(
                             caseId = caseId,
-                            videoUri = m.videoUri.ifBlank { backup.videoUri },
+                            videoUri = m.videoUri.ifBlank { uri },
                             positionMs = m.positionMs,
                             label = m.label,
                             createdAt = m.createdAt
@@ -166,12 +164,123 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
                 id = caseId,
                 title = title,
                 date = now,
-                videoUri = backup.videoUri,
+                videoUri = uri,
                 mediaType = MediaType.fromStorage(backup.mediaType)
             )
-            if (backup.videoUri.isNotBlank()) {
-                _selectedMediaUri.value = Uri.parse(backup.videoUri)
+            if (uri.isNotBlank()) {
+                _selectedMediaUri.value = Uri.parse(uri)
             }
+        }
+    }
+
+    /** Imports a portable .verimark package, returning the new case id. */
+    suspend fun importPackage(source: Uri): Long = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val importDir = File(app.filesDir, "verimark_import_${System.currentTimeMillis()}")
+        val raw: VeriMarkPackage.RawPackage = try {
+            app.contentResolver.openInputStream(source)?.use { input ->
+                VeriMarkPackage.readRaw(input, importDir)
+            } ?: throw VeriMarkPackage.PackageException("Cannot read the selected file.")
+        } catch (e: Exception) {
+            importDir.deleteRecursively()
+            if (e is VeriMarkPackage.PackageException) throw e
+            throw VeriMarkPackage.PackageException("This is not a valid VeriMark package.")
+        }
+        val project = VeriMarkPackage.projectFromJson(raw.projectJson)
+        val mediaUri = Uri.fromFile(raw.mediaFile).toString()
+        val title = project.title.ifBlank { "Imported Project" }
+        val now = System.currentTimeMillis()
+        val caseId = caseDao.insert(
+            CaseEntity(
+                title = title,
+                date = now,
+                videoUri = mediaUri,
+                mediaType = MediaType.fromStorage(project.mediaType)
+            )
+        )
+        if (project.markers.isNotEmpty()) {
+            markerDao.insertAll(
+                project.markers.map { m ->
+                    MarkerEntity(
+                        caseId = caseId,
+                        videoUri = mediaUri,
+                        positionMs = m.timestampMs,
+                        label = m.label,
+                        createdAt = if (m.createdAt > 0) m.createdAt else now
+                    )
+                }
+            )
+        }
+        _currentCase.value = CaseEntity(
+            id = caseId,
+            title = title,
+            date = now,
+            videoUri = mediaUri,
+            mediaType = MediaType.fromStorage(project.mediaType)
+        )
+        _selectedMediaUri.value = Uri.parse(mediaUri)
+        caseId
+    }
+
+    /** Exports the current project as a .verimark package to [destination]. */
+    suspend fun exportPackage(destination: Uri): Boolean = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val case = _currentCase.value ?: return@withContext false
+        val mediaUri = _selectedMediaUri.value ?: return@withContext false
+        val mediaName = readDisplayName(app, mediaUri) ?: "recording"
+        val mediaFileName = "${VeriMarkPackage.MEDIA_DIR}/$mediaName"
+        val project = VeriMarkPackage.PortableProject(
+            title = case.title,
+            mediaType = case.mediaType.name,
+            mediaFileName = mediaFileName,
+            markers = markers.value.map { m ->
+                VeriMarkPackage.PortableMarker(m.positionMs, m.label, m.createdAt)
+            }
+        )
+        val json = VeriMarkPackage.projectToJson(project)
+        val tempFile = File.createTempFile("verimark_export_", VeriMarkPackage.EXTENSION, app.cacheDir)
+        try {
+            tempFile.outputStream().use { out ->
+                app.contentResolver.openInputStream(mediaUri)?.use { mediaIn ->
+                    VeriMarkPackage.write(out, json, mediaFileName, mediaIn)
+                } ?: throw VeriMarkPackage.PackageException("Cannot read the current recording.")
+            }
+            app.contentResolver.openOutputStream(destination)?.use { dest ->
+                tempFile.inputStream().use { src -> src.copyTo(dest) }
+            } ?: throw VeriMarkPackage.PackageException("Cannot write the package.")
+            true
+        } finally {
+            tempFile.delete()
+        }
+    }
+
+    /** Builds a .verimark package in the cache directory for sharing. */
+    suspend fun buildPackageFileForSharing(): File? = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val case = _currentCase.value ?: return@withContext null
+        val mediaUri = _selectedMediaUri.value ?: return@withContext null
+        val mediaName = readDisplayName(app, mediaUri) ?: "recording"
+        val mediaFileName = "${VeriMarkPackage.MEDIA_DIR}/$mediaName"
+        val project = VeriMarkPackage.PortableProject(
+            title = case.title,
+            mediaType = case.mediaType.name,
+            mediaFileName = mediaFileName,
+            markers = markers.value.map { m ->
+                VeriMarkPackage.PortableMarker(m.positionMs, m.label, m.createdAt)
+            }
+        )
+        val json = VeriMarkPackage.projectToJson(project)
+        val file = File(app.cacheDir, VeriMarkPackage.safeProjectFileName(case.title) + VeriMarkPackage.EXTENSION)
+        try {
+            file.outputStream().use { out ->
+                app.contentResolver.openInputStream(mediaUri)?.use { mediaIn ->
+                    VeriMarkPackage.write(out, json, mediaFileName, mediaIn)
+                } ?: throw VeriMarkPackage.PackageException("Cannot read the current recording.")
+            }
+            file
+        } catch (e: Exception) {
+            file.delete()
+            null
         }
     }
 
