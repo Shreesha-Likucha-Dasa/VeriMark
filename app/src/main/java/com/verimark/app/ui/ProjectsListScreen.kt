@@ -24,7 +24,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -47,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.verimark.app.data.CaseWithMarkerCount
@@ -96,7 +99,43 @@ fun ProjectsListScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No projects yet. Tap + to create one.")
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.size(96.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Start your first review",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Open a video or audio recording and mark the moments that matter.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Button(onClick = { showNewDialog = true }) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Add Recording")
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -120,7 +159,11 @@ fun ProjectsListScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                color = if (item.case.mediaType == MediaType.AUDIO) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Icon(
@@ -130,7 +173,11 @@ fun ProjectsListScreen(
                                         Icons.Filled.Movie
                                     },
                                     contentDescription = if (item.case.mediaType == MediaType.AUDIO) "Audio" else "Video",
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    tint = if (item.case.mediaType == MediaType.AUDIO) {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
                                     modifier = Modifier
                                         .padding(10.dp)
                                         .size(22.dp)
@@ -143,11 +190,19 @@ fun ProjectsListScreen(
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "${formatDate(item.case.date)}  •  ${item.markerCount} marker(s)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        formatDate(item.case.date),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        "${item.markerCount} marker(s)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
+                                }
                             }
                             IconButton(onClick = { deleteTarget = item }) {
                                 Icon(Icons.Filled.Delete, contentDescription = "Delete project")

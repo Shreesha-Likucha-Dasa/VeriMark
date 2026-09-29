@@ -1,44 +1,67 @@
 package com.verimark.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-
-private val VeriGreen = Color(0xFF1B5E20)
-private val VeriGreenDark = Color(0xFFA5D6A7)
-private val VeriGreenDeep = Color(0xFF102A12)
+import androidx.compose.ui.unit.dp
 
 private val LightColors = lightColorScheme(
-    primary = VeriGreen,
+    primary = Color(0xFF0B2A52),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFB7F0B4),
-    onPrimaryContainer = VeriGreenDeep,
-    secondary = Color(0xFF52634F),
+    primaryContainer = Color(0xFFCDE9FF),
+    onPrimaryContainer = Color(0xFF001D35),
+    secondary = Color(0xFF0A6E80),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD5E8CF),
-    onSecondaryContainer = Color(0xFF101F10),
-    surface = Color(0xFFFCFDF6),
-    onSurface = Color(0xFF1A1C19),
-    background = Color(0xFFF7FAF4),
-    onBackground = Color(0xFF1A1C19)
+    secondaryContainer = Color(0xFFC9F0F7),
+    onSecondaryContainer = Color(0xFF012A32),
+    tertiary = Color(0xFFD63847),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFFDADB),
+    onTertiaryContainer = Color(0xFF3B0710),
+    error = Color(0xFFBA1A1A),
+    onError = Color.White,
+    background = Color(0xFFF4F7FB),
+    onBackground = Color(0xFF171C22),
+    surface = Color(0xFFFBFCFE),
+    onSurface = Color(0xFF171C22),
+    surfaceVariant = Color(0xFFE1E8F0),
+    onSurfaceVariant = Color(0xFF414A54),
+    outline = Color(0xFF717982)
 )
 
 private val DarkColors = darkColorScheme(
-    primary = VeriGreenDark,
-    onPrimary = Color(0xFF00390F),
-    primaryContainer = Color(0xFF1E4620),
-    onPrimaryContainer = Color(0xFFB7F0B4),
-    secondary = Color(0xFFB9CCB3),
-    onSecondary = Color(0xFF233523),
-    secondaryContainer = Color(0xFF3A4B37),
-    onSecondaryContainer = Color(0xFFD5E8CF),
-    surface = Color(0xFF111411),
-    onSurface = Color(0xFFE2E3DD),
-    background = Color(0xFF111411),
-    onBackground = Color(0xFFE2E3DD)
+    primary = Color(0xFFA6D3FF),
+    onPrimary = Color(0xFF003353),
+    primaryContainer = Color(0xFF144B75),
+    onPrimaryContainer = Color(0xFFCDE9FF),
+    secondary = Color(0xFF7ED7E7),
+    onSecondary = Color(0xFF00363F),
+    secondaryContainer = Color(0xFF0A4B57),
+    onSecondaryContainer = Color(0xFFC9F0F7),
+    tertiary = Color(0xFFFFB3B8),
+    onTertiary = Color(0xFF690012),
+    tertiaryContainer = Color(0xFF8F1B27),
+    onTertiaryContainer = Color(0xFFFFDADB),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    background = Color(0xFF0D1119),
+    onBackground = Color(0xFFE1E5EA),
+    surface = Color(0xFF12161D),
+    onSurface = Color(0xFFE1E5EA),
+    surfaceVariant = Color(0xFF414A54),
+    onSurfaceVariant = Color(0xFFC1C9D4),
+    outline = Color(0xFF8B939C)
+)
+
+private val VeriMarkShapes = Shapes(
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(24.dp)
 )
 
 @Composable
@@ -48,6 +71,7 @@ fun VeriMarkTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
+        shapes = VeriMarkShapes,
         content = content
     )
 }

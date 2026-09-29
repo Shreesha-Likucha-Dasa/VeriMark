@@ -309,7 +309,9 @@ fun VideoReviewScreen(
                     showLabelDialog = true
                 },
                 icon = { Icon(Icons.Filled.Flag, contentDescription = null) },
-                text = { Text("MARK MOMENT") }
+                text = { Text("MARK MOMENT") },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         }
     ) { paddingValues ->
