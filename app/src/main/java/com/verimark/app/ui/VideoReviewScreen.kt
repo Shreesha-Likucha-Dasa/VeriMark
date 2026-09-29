@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -103,6 +104,7 @@ fun VideoReviewScreen(
     var showClearAllDialog by remember { mutableStateOf(false) }
     var showReplaceDialog by remember { mutableStateOf(false) }
     var pendingReplacementUri by remember { mutableStateOf<Uri?>(null) }
+    var isSharingProject by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(caseId) {
@@ -218,12 +220,19 @@ fun VideoReviewScreen(
     }
 
     val shareProject = {
-        scope.launch {
-            val file = viewModel.buildPackageFileForSharing()
-            if (file != null) {
-                shareFile(context, file, "application/zip", "Share VeriMark Project")
-            } else {
-                Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
+        if (!isSharingProject) {
+            isSharingProject = true
+            scope.launch {
+                try {
+                    val file = viewModel.buildPackageFileForSharing()
+                    if (file != null) {
+                        shareFile(context, file, "application/zip", "Share VeriMark Project")
+                    } else {
+                        Toast.makeText(context, "Couldn't prepare project for sharing.", Toast.LENGTH_SHORT).show()
+                    }
+                } finally {
+                    isSharingProject = false
+                }
             }
         }
     }
@@ -265,6 +274,7 @@ fun VideoReviewScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("Share Project") },
+                                enabled = !isSharingProject,
                                 onClick = {
                                     menuExpanded = false
                                     shareProject()
@@ -406,6 +416,24 @@ fun VideoReviewScreen(
                 }
             }
         }
+    }
+
+    if (isSharingProject) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Preparing project…") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(16.dp))
+                    Text("Creating shareable package. Please wait.")
+                }
+            },
+            confirmButton = { }
+        )
     }
 
     if (showReplaceDialog) {
