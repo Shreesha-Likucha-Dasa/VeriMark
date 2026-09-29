@@ -1,12 +1,13 @@
 # VeriMark
 
-VeriMark is a fully local, offline Android app for insurance and claims investigators. Open a video, play it back, tap a single button to mark incident timestamps with labels, then export a structured PDF report.
+VeriMark is a fully local, offline Android app for insurance and claims investigators. Open a video or audio recording, play it back, tap a single button to mark incident timestamps with labels, then export a structured PDF report.
 
 Everything runs on-device. There is **no network, cloud, or telemetry code** — the app does not even request the `INTERNET` permission.
 
 ## Features
 
 - **Video playback** — Media3 ExoPlayer (`PlayerView`) with exact-frame seeking (`SeekParameters.EXACT`), opening paused by default.
+- **Audio playback** — the same marker workflow for MP3, WAV, M4A/AAC, and OGG/Opus audio, with a dedicated audio player (progress, current time, total duration, play/pause, ±10s seek).
 - **Incident markers** — a prominent "MARK INCIDENT" button captures the current playback position, pauses playback, and saves a labeled marker to a local Room database.
 - **Timeline** — all markers listed with `MM:SS` timestamps in pill badges; tap a row to seek exactly to that moment.
 - **PDF reports** — native `android.graphics.pdf.PdfDocument` generates a report and shares it via `FileProvider`.

@@ -14,12 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -45,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.verimark.app.data.CaseWithMarkerCount
+import com.verimark.app.data.MediaType
 import com.verimark.app.util.formatDate
 import com.verimark.app.util.takePersistableReadPermission
 import kotlinx.coroutines.launch
@@ -113,6 +119,24 @@ fun ProjectsListScreen(
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(
+                                    if (item.case.mediaType == MediaType.AUDIO) {
+                                        Icons.Filled.AudioFile
+                                    } else {
+                                        Icons.Filled.Movie
+                                    },
+                                    contentDescription = if (item.case.mediaType == MediaType.AUDIO) "Audio" else "Video",
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier
+                                        .padding(10.dp)
+                                        .size(22.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     item.case.title,
@@ -151,10 +175,10 @@ fun ProjectsListScreen(
                         singleLine = true
                     )
                     Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = { videoPicker.launch(arrayOf("video/*")) }) {
+                    TextButton(onClick = { videoPicker.launch(arrayOf("video/*", "audio/*")) }) {
                         Text(
-                            if (pickedVideo == null) "Choose Video"
-                            else "Video selected — tap to change"
+                            if (pickedVideo == null) "Choose Media"
+                            else "Media selected — tap to change"
                         )
                     }
                 }

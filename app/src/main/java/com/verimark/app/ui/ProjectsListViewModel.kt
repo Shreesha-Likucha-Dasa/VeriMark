@@ -8,6 +8,7 @@ import com.verimark.app.data.CaseDao
 import com.verimark.app.data.CaseEntity
 import com.verimark.app.data.CaseWithMarkerCount
 import com.verimark.app.data.VeriMarkDatabase
+import com.verimark.app.util.detectMediaType
 import com.verimark.app.util.readDisplayName
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +30,8 @@ class ProjectsListViewModel(application: Application) : AndroidViewModel(applica
             CaseEntity(
                 title = resolvedTitle,
                 date = System.currentTimeMillis(),
-                videoUri = uri.toString()
+                videoUri = uri.toString(),
+                mediaType = detectMediaType(getApplication(), uri)
             )
         )
     }

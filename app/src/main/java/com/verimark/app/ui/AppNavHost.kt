@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.verimark.app.data.CaseEntity
 import com.verimark.app.data.VeriMarkDatabase
+import com.verimark.app.util.detectMediaType
 import com.verimark.app.util.readDisplayName
 import kotlinx.coroutines.flow.StateFlow
 
@@ -28,7 +29,12 @@ fun AppNavHost(sharedVideo: StateFlow<Uri?>, onSharedConsumed: () -> Unit) {
         val title = readDisplayName(context, uri) ?: "Shared Video"
         val db = VeriMarkDatabase.get(context)
         val id = db.caseDao().insert(
-            CaseEntity(title = title, date = System.currentTimeMillis(), videoUri = uri.toString())
+            CaseEntity(
+                title = title,
+                date = System.currentTimeMillis(),
+                videoUri = uri.toString(),
+                mediaType = detectMediaType(context, uri)
+            )
         )
         onSharedConsumed()
         navController.navigate("review/$id") { popUpTo("projects") }

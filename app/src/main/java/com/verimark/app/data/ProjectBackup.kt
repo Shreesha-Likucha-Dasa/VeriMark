@@ -15,6 +15,7 @@ data class MarkerBackup(
 data class ProjectBackup(
     val caseTitle: String,
     val videoUri: String,
+    val mediaType: String = MediaType.VIDEO.name,
     val markers: List<MarkerBackup>
 ) {
 
@@ -22,6 +23,7 @@ data class ProjectBackup(
         val root = JSONObject()
         root.put("caseTitle", caseTitle)
         root.put("videoUri", videoUri)
+        root.put("mediaType", mediaType)
         val array = JSONArray()
         markers.forEach { marker ->
             array.put(
@@ -42,6 +44,7 @@ data class ProjectBackup(
             val root = JSONObject(json)
             val caseTitle = root.optString("caseTitle", "")
             val videoUri = root.optString("videoUri", "")
+            val mediaType = root.optString("mediaType", MediaType.VIDEO.name)
             val markersArray = root.optJSONArray("markers")
             val markers = mutableListOf<MarkerBackup>()
             if (markersArray != null) {
@@ -57,7 +60,7 @@ data class ProjectBackup(
                     )
                 }
             }
-            ProjectBackup(caseTitle = caseTitle, videoUri = videoUri, markers = markers)
+            ProjectBackup(caseTitle = caseTitle, videoUri = videoUri, mediaType = mediaType, markers = markers)
         } catch (e: Exception) {
             null
         }

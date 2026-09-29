@@ -24,6 +24,6 @@ interface CaseDao {
     @Delete
     suspend fun deleteCase(caseEntity: CaseEntity)
 
-    @Query("UPDATE cases SET videoUri = :videoUri WHERE id = :caseId")
-    suspend fun updateVideoUri(caseId: Long, videoUri: String)
+    @Query("UPDATE cases SET videoUri = :videoUri, mediaType = :mediaType WHERE id = :caseId")
+    suspend fun updateMedia(caseId: Long, videoUri: String, mediaType: MediaType)
 }

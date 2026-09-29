@@ -8,5 +8,6 @@ data class CaseEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val title: String,
     val date: Long,
-    val videoUri: String = ""
+    val videoUri: String = "",
+    val mediaType: MediaType = MediaType.VIDEO
 )

@@ -12,8 +12,10 @@ import com.verimark.app.data.CaseEntity
 import com.verimark.app.data.MarkerBackup
 import com.verimark.app.data.MarkerDao
 import com.verimark.app.data.MarkerEntity
+import com.verimark.app.data.MediaType
 import com.verimark.app.data.ProjectBackup
 import com.verimark.app.data.VeriMarkDatabase
+import com.verimark.app.util.detectMediaType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,13 +70,14 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
         player = null
     }
 
-    /** Replaces the video for the currently open case. */
-    fun setVideoForCurrentCase(uri: Uri) {
+    /** Replaces the media (video or audio) for the currently open case. */
+    fun setMediaForCurrentCase(uri: Uri) {
         _selectedVideoUri.value = uri
         val case = _currentCase.value ?: return
+        val mediaType = detectMediaType(getApplication(), uri)
         viewModelScope.launch {
-            caseDao.updateVideoUri(case.id, uri.toString())
-            _currentCase.value = case.copy(videoUri = uri.toString())
+            caseDao.updateMedia(case.id, uri.toString(), mediaType)
+            _currentCase.value = case.copy(videoUri = uri.toString(), mediaType = mediaType)
         }
     }
 
@@ -120,6 +123,7 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
         return ProjectBackup(
             caseTitle = case.title,
             videoUri = uri.toString(),
+            mediaType = case.mediaType.name,
             markers = markers.value.map { marker ->
                 MarkerBackup(
                     videoUri = marker.videoUri,
@@ -136,7 +140,14 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val title = backup.caseTitle.ifBlank { "Imported Case" }
             val now = System.currentTimeMillis()
-            val caseId = caseDao.insert(CaseEntity(title = title, date = now, videoUri = backup.videoUri))
+            val caseId = caseDao.insert(
+                CaseEntity(
+                    title = title,
+                    date = now,
+                    videoUri = backup.videoUri,
+                    mediaType = MediaType.fromStorage(backup.mediaType)
+                )
+            )
             if (backup.markers.isNotEmpty()) {
                 markerDao.insertAll(
                     backup.markers.map { m ->
@@ -150,7 +161,13 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
                     }
                 )
             }
-            _currentCase.value = CaseEntity(id = caseId, title = title, date = now, videoUri = backup.videoUri)
+            _currentCase.value = CaseEntity(
+                id = caseId,
+                title = title,
+                date = now,
+                videoUri = backup.videoUri,
+                mediaType = MediaType.fromStorage(backup.mediaType)
+            )
             if (backup.videoUri.isNotBlank()) {
                 _selectedVideoUri.value = Uri.parse(backup.videoUri)
             }

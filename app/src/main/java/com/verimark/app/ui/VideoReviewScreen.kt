@@ -63,6 +63,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.ui.PlayerView
+import com.verimark.app.data.MediaType
 import com.verimark.app.data.ProjectBackup
 import com.verimark.app.pdf.generatePdfReport
 import com.verimark.app.pdf.sharePdf
@@ -133,7 +134,7 @@ fun VideoReviewScreen(
     ) { uri: Uri? ->
         if (uri != null) {
             takePersistableReadPermission(context, uri)
-            viewModel.setVideoForCurrentCase(uri)
+            viewModel.setMediaForCurrentCase(uri)
         }
     }
 
@@ -200,8 +201,8 @@ fun VideoReviewScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { videoPicker.launch(arrayOf("video/*")) }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Add Video")
+                    IconButton(onClick = { videoPicker.launch(arrayOf("video/*", "audio/*")) }) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add Media")
                     }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
@@ -263,31 +264,36 @@ fun VideoReviewScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Player occupies the top half.
+            // Player occupies the top half (video surface or audio player).
+            val isAudio = case?.mediaType == MediaType.AUDIO
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color.Black),
+                    .background(if (isAudio) MaterialTheme.colorScheme.surface else Color.Black),
                 contentAlignment = Alignment.Center
             ) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            useController = true
-                            controllerAutoShow = true
-                            setShowNextButton(false)
-                            setShowPreviousButton(false)
-                            this.player = player
-                        }
-                    },
-                    update = { view -> view.player = player },
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (isAudio) {
+                    AudioPlayer(player = player, title = case?.title.orEmpty())
+                } else {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                useController = true
+                                controllerAutoShow = true
+                                setShowNextButton(false)
+                                setShowPreviousButton(false)
+                                this.player = player
+                            }
+                        },
+                        update = { view -> view.player = player },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
                 if (videoUri == null) {
                     Text(
-                        text = "Tap + to open a local video",
-                        color = Color.White,
+                        text = "Tap + to open a local video or audio file",
+                        color = if (isAudio) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
@@ -302,7 +308,7 @@ fun VideoReviewScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No markers yet. Play the video and tap MARK INCIDENT.",
+                        text = "No markers yet. Play the media and tap MARK INCIDENT.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
