@@ -70,7 +70,8 @@ import com.verimark.app.pdf.sharePdf
 import com.verimark.app.util.formatMs
 import com.verimark.app.util.takePersistableReadPermission
 
-@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable
 fun VideoReviewScreen(
     caseId: Long,
@@ -81,7 +82,7 @@ fun VideoReviewScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val case by viewModel.currentCase.collectAsState()
-    val videoUri by viewModel.selectedVideoUri.collectAsState()
+    val mediaUri by viewModel.selectedMediaUri.collectAsState()
     val markers by viewModel.markers.collectAsState()
 
     val player = remember {
@@ -120,8 +121,8 @@ fun VideoReviewScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(videoUri) {
-        val uri = videoUri
+    LaunchedEffect(mediaUri) {
+        val uri = mediaUri
         if (uri != null) {
             player.setMediaItem(MediaItem.fromUri(uri))
             player.prepare()
@@ -129,7 +130,7 @@ fun VideoReviewScreen(
         }
     }
 
-    val videoPicker = rememberLauncherForActivityResult(
+    val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
@@ -201,7 +202,7 @@ fun VideoReviewScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { videoPicker.launch(arrayOf("video/*", "audio/*")) }) {
+                    IconButton(onClick = { mediaPicker.launch(arrayOf("video/*", "audio/*")) }) {
                         Icon(Icons.Filled.Add, contentDescription = "Add Media")
                     }
                     Box {
@@ -255,7 +256,7 @@ fun VideoReviewScreen(
                     showLabelDialog = true
                 },
                 icon = { Icon(Icons.Filled.Flag, contentDescription = null) },
-                text = { Text("MARK INCIDENT") }
+                text = { Text("MARK MOMENT") }
             )
         }
     ) { paddingValues ->
@@ -290,7 +291,7 @@ fun VideoReviewScreen(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-                if (videoUri == null) {
+                if (mediaUri == null) {
                     Text(
                         text = "Tap + to open a local video or audio file",
                         color = if (isAudio) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
@@ -308,7 +309,7 @@ fun VideoReviewScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No markers yet. Play the media and tap MARK INCIDENT.",
+                        text = "No markers yet. Play the media and tap MARK MOMENT.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -408,7 +409,7 @@ private fun LabelDialog(
     var label by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Mark Incident") },
+        title = { Text("Mark Moment") },
         text = {
             Column {
                 Text("Timestamp: ${formatMs(timestampMs)}")
@@ -416,7 +417,7 @@ private fun LabelDialog(
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("Label (e.g., Impact)") },
+                    label = { Text("Label (e.g., Key moment)") },
                     singleLine = true
                 )
             }

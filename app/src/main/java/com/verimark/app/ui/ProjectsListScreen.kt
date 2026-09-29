@@ -67,15 +67,15 @@ fun ProjectsListScreen(
 
     var showNewDialog by remember { mutableStateOf(false) }
     var newTitle by remember { mutableStateOf("") }
-    var pickedVideo by remember { mutableStateOf<Uri?>(null) }
+    var pickedMedia by remember { mutableStateOf<Uri?>(null) }
     var deleteTarget by remember { mutableStateOf<CaseWithMarkerCount?>(null) }
 
-    val videoPicker = rememberLauncherForActivityResult(
+    val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
             takePersistableReadPermission(context, uri)
-            pickedVideo = uri
+            pickedMedia = uri
         }
     }
 
@@ -163,7 +163,7 @@ fun ProjectsListScreen(
         AlertDialog(
             onDismissRequest = {
                 showNewDialog = false
-                pickedVideo = null
+                pickedMedia = null
             },
             title = { Text("New Project") },
             text = {
@@ -175,9 +175,9 @@ fun ProjectsListScreen(
                         singleLine = true
                     )
                     Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = { videoPicker.launch(arrayOf("video/*", "audio/*")) }) {
+                    TextButton(onClick = { mediaPicker.launch(arrayOf("video/*", "audio/*")) }) {
                         Text(
-                            if (pickedVideo == null) "Choose Media"
+                            if (pickedMedia == null) "Choose Media"
                             else "Media selected — tap to change"
                         )
                     }
@@ -185,14 +185,14 @@ fun ProjectsListScreen(
             },
             confirmButton = {
                 TextButton(
-                    enabled = pickedVideo != null,
+                    enabled = pickedMedia != null,
                     onClick = {
-                        val uri = pickedVideo ?: return@TextButton
+                        val uri = pickedMedia ?: return@TextButton
                         scope.launch {
                             val id = viewModel.createProject(newTitle, uri)
                             showNewDialog = false
                             newTitle = ""
-                            pickedVideo = null
+                            pickedMedia = null
                             onProjectClick(id)
                         }
                     }
@@ -204,7 +204,7 @@ fun ProjectsListScreen(
                 TextButton(
                     onClick = {
                         showNewDialog = false
-                        pickedVideo = null
+                        pickedMedia = null
                     }
                 ) {
                     Text("Cancel")

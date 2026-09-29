@@ -26,7 +26,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalCoroutinesApi::class, UnstableApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 class VeriMarkViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = VeriMarkDatabase.get(application)
@@ -40,8 +41,8 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
     private val _currentCase = MutableStateFlow<CaseEntity?>(null)
     val currentCase: StateFlow<CaseEntity?> = _currentCase.asStateFlow()
 
-    private val _selectedVideoUri = MutableStateFlow<Uri?>(null)
-    val selectedVideoUri: StateFlow<Uri?> = _selectedVideoUri.asStateFlow()
+    private val _selectedMediaUri = MutableStateFlow<Uri?>(null)
+    val selectedMediaUri: StateFlow<Uri?> = _selectedMediaUri.asStateFlow()
 
     val markers: StateFlow<List<MarkerEntity>> = _currentCase
         .flatMapLatest { case ->
@@ -56,7 +57,7 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
             _currentCase.value = case
             val video = case.videoUri.ifBlank { markerDao.firstMarkerVideoUri(caseId).orEmpty() }
             if (video.isNotBlank()) {
-                _selectedVideoUri.value = Uri.parse(video)
+                _selectedMediaUri.value = Uri.parse(video)
             }
         }
     }
@@ -72,7 +73,7 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
 
     /** Replaces the media (video or audio) for the currently open case. */
     fun setMediaForCurrentCase(uri: Uri) {
-        _selectedVideoUri.value = uri
+        _selectedMediaUri.value = uri
         val case = _currentCase.value ?: return
         val mediaType = detectMediaType(getApplication(), uri)
         viewModelScope.launch {
@@ -84,7 +85,7 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
     /** Inserts a marker at the current playback position. */
     fun addMarker(label: String) {
         val case = _currentCase.value ?: return
-        val uri = _selectedVideoUri.value ?: return
+        val uri = _selectedMediaUri.value ?: return
         val positionMs = player?.currentPosition ?: 0L
         viewModelScope.launch {
             markerDao.insert(
@@ -119,7 +120,7 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
     /** Builds a serializable snapshot of the current case and markers. */
     fun buildBackup(): ProjectBackup? {
         val case = _currentCase.value ?: return null
-        val uri = _selectedVideoUri.value ?: return null
+        val uri = _selectedMediaUri.value ?: return null
         return ProjectBackup(
             caseTitle = case.title,
             videoUri = uri.toString(),
@@ -169,7 +170,7 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
                 mediaType = MediaType.fromStorage(backup.mediaType)
             )
             if (backup.videoUri.isNotBlank()) {
-                _selectedVideoUri.value = Uri.parse(backup.videoUri)
+                _selectedMediaUri.value = Uri.parse(backup.videoUri)
             }
         }
     }
