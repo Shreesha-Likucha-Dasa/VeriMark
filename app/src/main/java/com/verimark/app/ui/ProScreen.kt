@@ -192,6 +192,14 @@ fun ProScreen(
                 Spacer(Modifier.height(16.dp))
 
                 val selectedPrice = priceFor(selectedTier)
+                val statusMessage = when {
+                    entitlement is EntitlementState.Loading -> "Connecting to Google Play…"
+                    entitlement is EntitlementState.BillingUnavailable ->
+                        "Google Play billing is unavailable."
+                    purchasing -> "Opening Google Play…"
+                    selectedPrice.isBlank() -> "This plan is temporarily unavailable."
+                    else -> null
+                }
                 Button(
                     onClick = {
                         activity?.let { viewModel.purchase(it, BillingProducts.productId(selectedTier)) }
@@ -208,6 +216,14 @@ fun ProScreen(
                         Spacer(Modifier.width(8.dp))
                     }
                     Text("Continue")
+                }
+                if (statusMessage != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        statusMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

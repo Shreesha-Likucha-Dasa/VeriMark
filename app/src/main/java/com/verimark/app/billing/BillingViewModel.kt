@@ -42,21 +42,10 @@ class BillingViewModel(application: Application) : AndroidViewModel(application)
     fun purchase(activity: Activity, productId: String) =
         repository.launchPurchase(activity, productId)
 
-    private fun ProductDetails.toProProduct(): ProProduct {
-        val safeTitle = runCatching { title }.getOrDefault(productId)
-        val safePrice = runCatching {
-            val isSub = productType == BillingClient.ProductType.SUBS
-            if (isSub) {
-                subscriptionOfferDetails
-                    ?.firstOrNull()
-                    ?.pricingPhases
-                    ?.pricingPhaseList
-                    ?.firstOrNull()
-                    ?.formattedPrice
-            } else {
-                oneTimePurchaseOfferDetails?.formattedPrice
-            }.orEmpty()
-        }.getOrDefault("")
-        return ProProduct(productId = productId, title = safeTitle, price = safePrice)
-    }
+    private fun ProductDetails.toProProduct(): ProProduct =
+        ProProduct(
+            productId = productId,
+            title = runCatching { title }.getOrDefault(productId),
+            price = priceString()
+        )
 }

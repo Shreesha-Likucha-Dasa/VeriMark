@@ -2,6 +2,7 @@ package com.verimark.app.billing
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
@@ -19,6 +20,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+
+private const val TAG = "VeriMarkBilling"
 
 /** One-shot UI messages produced by billing operations. */
 sealed class BillingEvent {
@@ -68,6 +71,7 @@ class BillingRepository private constructor(private val context: Context) {
     private var client: BillingClient? = null
     private var connected = false
     private var connecting = false
+    private var queryingProducts = false
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { result, purchases ->
         try {
@@ -79,13 +83,27 @@ class BillingRepository private constructor(private val context: Context) {
 
     /** Connects once, then queries products and entitlement. Safe to call repeatedly. */
     fun start() {
-        if (connected || connecting) return
+        if (connected || connecting) {
+            Log.i(TAG, "start() skipped: connected=$connected connecting=$connecting")
+            return
+        }
         try {
-            val c = client ?: createClient().also { client = it }
+            val c = client ?: createClient().also {
+                Log.i(TAG, "BillingClient created")
+                client = it
+            }
             connecting = true
+            Log.i(TAG, "startConnection()")
             c.startConnection(object : BillingClientStateListener {
                 override fun onBillingSetupFinished(billingResult: BillingResult) {
                     connecting = false
+                    Log.i(
+                        TAG,
+                        "onBillingSetupFinished responseCode=${billingResult.responseCode} " +
+                            "debugMessage=${billingResult.debugMessage} ready=${
+                                billingResult.responseCode == BillingClient.BillingResponseCode.OK
+                            }"
+                    )
                     if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                         connected = true
                         queryProducts()
@@ -101,12 +119,14 @@ class BillingRepository private constructor(private val context: Context) {
                 override fun onBillingServiceDisconnected() {
                     connecting = false
                     connected = false
+                    Log.i(TAG, "onBillingServiceDisconnected")
                     // Keep the last known entitlement so offline Pro users stay Pro.
                 }
             })
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             connecting = false
             connected = false
+            Log.e(TAG, "startConnection failed", e)
             if (_entitlement.value == EntitlementState.Loading) {
                 _entitlement.value = EntitlementState.BillingUnavailable
             }
@@ -127,6 +147,11 @@ class BillingRepository private constructor(private val context: Context) {
     fun launchPurchase(activity: Activity, productId: String) {
         try {
             val c = client
+            Log.i(
+                TAG,
+                "Continue clicked: productId=$productId isReady=${c?.isReady} " +
+                    "productsLoaded=${_products.value.map { it.productId }}"
+            )
             if (c == null || !c.isReady) {
                 start()
                 emit("Google Play isn't available right now. Please try again.")
@@ -134,26 +159,47 @@ class BillingRepository private constructor(private val context: Context) {
             }
             val details = _products.value.firstOrNull { it.productId == productId }
             if (details == null) {
+                Log.w(TAG, "Continue clicked but ProductDetails missing for $productId")
                 emit("This item isn't available right now. Please try again.")
                 return
             }
+            val offer = if (details.productType == BillingClient.ProductType.SUBS) {
+                details.selectSubscriptionOffer()
+            } else {
+                null
+            }
+            Log.i(
+                TAG,
+                "Launching Google Play Billing flow productId=${details.productId} " +
+                    "productType=${details.productType} " +
+                    "offerTokenPresent=${offer?.offerToken != null} " +
+                    "basePlanId=${offer?.basePlanId.orEmpty()}"
+            )
             _purchasing.value = true
+            val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+                .setProductDetails(details)
+                .apply {
+                    if (details.productType == BillingClient.ProductType.SUBS && offer != null) {
+                        setOfferToken(offer.offerToken)
+                    }
+                }
+                .build()
             val params = BillingFlowParams.newBuilder()
-                .setProductDetailsParamsList(
-                    listOf(
-                        BillingFlowParams.ProductDetailsParams.newBuilder()
-                            .setProductDetails(details)
-                            .build()
-                    )
-                )
+                .setProductDetailsParamsList(listOf(productParams))
                 .build()
             val result = c.launchBillingFlow(activity, params)
+            Log.i(
+                TAG,
+                "launchBillingFlow returned responseCode=${result.responseCode} " +
+                    "debugMessage=${result.debugMessage}"
+            )
             if (result.responseCode != BillingClient.BillingResponseCode.OK) {
                 _purchasing.value = false
                 emitLaunchError(result.responseCode)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             _purchasing.value = false
+            Log.e(TAG, "launchPurchase failed", e)
             emit("Google Play isn't available right now. Please try again.")
         }
     }
@@ -182,7 +228,16 @@ class BillingRepository private constructor(private val context: Context) {
 
     private fun queryProducts() {
         val c = client ?: return
-        if (!c.isReady) return
+        if (!c.isReady) {
+            Log.i(TAG, "queryProducts skipped: isReady=false")
+            return
+        }
+        if (queryingProducts) {
+            Log.i(TAG, "queryProducts skipped: already in flight")
+            return
+        }
+        queryingProducts = true
+        Log.i(TAG, "queryProductDetailsAsync start")
         // Billing requires one query per product type: subscriptions and
         // one-time (INAPP) products must be queried separately.
         val subsParams = QueryProductDetailsParams.newBuilder()
@@ -200,36 +255,46 @@ class BillingRepository private constructor(private val context: Context) {
                 )
             )
             .build()
+
+        val results = mutableMapOf<String, List<ProductDetails>>()
+        var pending = 2
+
+        fun onTypeDone(type: String, list: List<ProductDetails>) {
+            results[type] = list
+            pending--
+            if (pending == 0) {
+                queryingProducts = false
+                val merged = results["SUBS"].orEmpty() + results["INAPP"].orEmpty()
+                _products.value = merged
+                Log.i(TAG, "products stored: ${merged.map { it.productId }}")
+            }
+        }
+
         try {
-            c.queryProductDetailsAsync(subsParams) { subsResult, subsDetails ->
-                val subList = try {
-                    if (subsResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                        subsDetails?.productDetailsList.orEmpty()
-                    } else {
-                        emptyList()
-                    }
-                } catch (_: Exception) {
+            c.queryProductDetailsAsync(subsParams) { result, details ->
+                val list = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    details?.productDetailsList.orEmpty()
+                } else {
                     emptyList()
                 }
-                try {
-                    c.queryProductDetailsAsync(inAppParams) { inAppResult, inAppDetails ->
-                        val inAppList = try {
-                            if (inAppResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                                inAppDetails?.productDetailsList.orEmpty()
-                            } else {
-                                emptyList()
-                            }
-                        } catch (_: Exception) {
-                            emptyList()
-                        }
-                        _products.value = subList + inAppList
-                    }
-                } catch (_: Exception) {
-                    _products.value = subList
-                }
+                logProductResult("SUBS", result, list)
+                onTypeDone("SUBS", list)
             }
         } catch (_: Exception) {
-            _products.value = emptyList()
+            onTypeDone("SUBS", emptyList())
+        }
+        try {
+            c.queryProductDetailsAsync(inAppParams) { result, details ->
+                val list = if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    details?.productDetailsList.orEmpty()
+                } else {
+                    emptyList()
+                }
+                logProductResult("INAPP", result, list)
+                onTypeDone("INAPP", list)
+            }
+        } catch (_: Exception) {
+            onTypeDone("INAPP", emptyList())
         }
     }
 
@@ -238,6 +303,28 @@ class BillingRepository private constructor(private val context: Context) {
             .setProductId(id)
             .setProductType(type)
             .build()
+
+    private fun logProductResult(type: String, result: BillingResult, list: List<ProductDetails>) {
+        Log.i(
+            TAG,
+            "queryProductDetailsAsync[$type] responseCode=${result.responseCode} " +
+                "debugMessage=${result.debugMessage} count=${list.size}"
+        )
+        list.forEach { details ->
+            val offers = details.subscriptionOfferDetails.orEmpty()
+            val offerInfo = offers.joinToString(" | ") { offer ->
+                val price = offer.pricingPhases?.pricingPhaseList?.firstOrNull()?.formattedPrice.orEmpty()
+                "offerPresent=${offer.offerToken != null} base=${offer.basePlanId} " +
+                    "price=$price phases=${offer.pricingPhases?.pricingPhaseList?.size ?: 0}"
+            }
+            Log.i(
+                TAG,
+                "  $type id=${details.productId} type=${details.productType} " +
+                    "title=${details.title} offers=${offers.size} [$offerInfo] " +
+                    "oneTimePrice=${details.oneTimePurchaseOfferDetails?.formattedPrice.orEmpty()}"
+            )
+        }
+    }
 
     private fun refreshEntitlement(onDone: ((EntitlementState) -> Unit)? = null) {
         val c = client ?: return
@@ -250,6 +337,11 @@ class BillingRepository private constructor(private val context: Context) {
             .build()
         try {
             c.queryPurchasesAsync(subsParams) { subsResult, subs ->
+                Log.i(
+                    TAG,
+                    "queryPurchases[SUBS] responseCode=${subsResult.responseCode} " +
+                        "debugMessage=${subsResult.debugMessage} count=${subs?.size ?: 0}"
+                )
                 try {
                     if (subsResult.responseCode != BillingClient.BillingResponseCode.OK) {
                         onDone?.invoke(_entitlement.value)
@@ -259,6 +351,11 @@ class BillingRepository private constructor(private val context: Context) {
                         .setProductType(BillingClient.ProductType.INAPP)
                         .build()
                     c.queryPurchasesAsync(inAppParams) { inAppResult, inApps ->
+                        Log.i(
+                            TAG,
+                            "queryPurchases[INAPP] responseCode=${inAppResult.responseCode} " +
+                                "debugMessage=${inAppResult.debugMessage} count=${inApps?.size ?: 0}"
+                        )
                         try {
                             if (inAppResult.responseCode != BillingClient.BillingResponseCode.OK) {
                                 onDone?.invoke(_entitlement.value)
@@ -296,7 +393,13 @@ class BillingRepository private constructor(private val context: Context) {
                     val params = AcknowledgePurchaseParams.newBuilder()
                         .setPurchaseToken(purchase.purchaseToken)
                         .build()
-                    c.acknowledgePurchase(params) { /* acknowledgement is best-effort */ }
+                    c.acknowledgePurchase(params) { ackResult ->
+                        Log.i(
+                            TAG,
+                            "acknowledgePurchase responseCode=${ackResult.responseCode} " +
+                                "debugMessage=${ackResult.debugMessage}"
+                        )
+                    }
                 }
             } catch (_: Exception) {
                 // Ignore; entitlement remains consistent with Google Play state.
@@ -306,6 +409,11 @@ class BillingRepository private constructor(private val context: Context) {
 
     private fun handlePurchasesUpdated(result: BillingResult, purchases: List<Purchase>?) {
         _purchasing.value = false
+        Log.i(
+            TAG,
+            "onPurchasesUpdated responseCode=${result.responseCode} " +
+                "debugMessage=${result.debugMessage} purchases=${purchases?.size ?: 0}"
+        )
         when (result.responseCode) {
             BillingClient.BillingResponseCode.OK -> {
                 val owned = purchases.orEmpty()
@@ -325,25 +433,31 @@ class BillingRepository private constructor(private val context: Context) {
                 refreshEntitlement()
                 emit("You already own this item.")
             }
-            BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE,
-            BillingClient.BillingResponseCode.SERVICE_DISCONNECTED,
+            BillingClient.BillingResponseCode.SERVICE_DISCONNECTED -> {
+                start()
+                queryProducts()
+                emit("Google Play billing disconnected. Reconnecting…")
+            }
+            BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE ->
+                emit("Google Play billing is temporarily unavailable.")
             BillingClient.BillingResponseCode.BILLING_UNAVAILABLE ->
-                emit("Google Play isn't available right now. Please try again.")
+                emit("Google Play billing isn't available on this device.")
             BillingClient.BillingResponseCode.ITEM_UNAVAILABLE ->
-                emit("This item isn't available.")
+                emit("This purchase option is currently unavailable.")
             BillingClient.BillingResponseCode.DEVELOPER_ERROR ->
-                emit("Something went wrong with billing. Please try again later.")
+                emit("Purchase configuration error. Please try again later.")
             BillingClient.BillingResponseCode.ERROR ->
                 emit("Something went wrong. Please try again.")
             BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED ->
                 emit("This device doesn't support Google Play billing.")
             BillingClient.BillingResponseCode.NETWORK_ERROR ->
-                emit("Check your connection and try again.")
+                emit("Please check your internet connection and try again.")
             else -> emit("Something went wrong. Please try again.")
         }
     }
 
     private fun emitLaunchError(responseCode: Int) {
+        Log.i(TAG, "launchBillingFlow error responseCode=$responseCode")
         when (responseCode) {
             BillingClient.BillingResponseCode.USER_CANCELED -> emit("Purchase cancelled.")
             BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> {
@@ -351,17 +465,22 @@ class BillingRepository private constructor(private val context: Context) {
                 emit("You already own this item.")
             }
             BillingClient.BillingResponseCode.ITEM_UNAVAILABLE ->
-                emit("This item isn't available.")
-            BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE,
-            BillingClient.BillingResponseCode.SERVICE_DISCONNECTED,
+                emit("This purchase option is currently unavailable.")
+            BillingClient.BillingResponseCode.SERVICE_DISCONNECTED -> {
+                start()
+                queryProducts()
+                emit("Google Play billing disconnected. Reconnecting…")
+            }
+            BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE ->
+                emit("Google Play billing is temporarily unavailable.")
             BillingClient.BillingResponseCode.BILLING_UNAVAILABLE ->
-                emit("Google Play isn't available right now. Please try again.")
+                emit("Google Play billing isn't available on this device.")
             BillingClient.BillingResponseCode.DEVELOPER_ERROR ->
-                emit("Something went wrong with billing. Please try again later.")
+                emit("Purchase configuration error. Please try again later.")
             BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED ->
                 emit("This device doesn't support Google Play billing.")
             BillingClient.BillingResponseCode.NETWORK_ERROR ->
-                emit("Check your connection and try again.")
+                emit("Please check your internet connection and try again.")
             else -> emit("Something went wrong. Please try again.")
         }
     }
