@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.verimark.app.data.CaseDao
 import com.verimark.app.data.CaseEntity
 import com.verimark.app.data.CaseWithMarkerCount
+import com.verimark.app.data.MarkerDao
 import com.verimark.app.data.VeriMarkDatabase
+import com.verimark.app.portable.VeriMarkImporter
 import com.verimark.app.util.detectMediaType
 import com.verimark.app.util.readDisplayName
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,7 +19,9 @@ import kotlinx.coroutines.launch
 
 class ProjectsListViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val caseDao: CaseDao = VeriMarkDatabase.get(application).caseDao()
+    private val db = VeriMarkDatabase.get(application)
+    private val caseDao: CaseDao = db.caseDao()
+    private val markerDao: MarkerDao = db.markerDao()
 
     /** All projects with their marker counts, newest first. */
     val projects: StateFlow<List<CaseWithMarkerCount>> = caseDao.casesWithMarkerCount()
@@ -35,6 +39,10 @@ class ProjectsListViewModel(application: Application) : AndroidViewModel(applica
             )
         )
     }
+
+    /** Imports a portable .verimark package, returning the new case id. */
+    suspend fun importProject(source: Uri): Long =
+        VeriMarkImporter.import(getApplication(), source, caseDao, markerDao).caseId
 
     /** Deletes a project; its markers are cascade-deleted via the foreign key. */
     fun deleteProject(case: CaseEntity) {

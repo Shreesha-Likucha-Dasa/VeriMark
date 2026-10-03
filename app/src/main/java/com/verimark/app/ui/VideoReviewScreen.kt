@@ -196,29 +196,6 @@ fun VideoReviewScreen(
         }
     }
 
-    val exportPackagePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/zip")
-    ) { uri: Uri? ->
-        if (uri != null) {
-            scope.launch {
-                val result = runCatching { viewModel.exportPackage(uri) }
-                val message = result.getOrNull()?.let { if (it) "Project exported" else "Export failed" }
-                    ?: ((result.exceptionOrNull() as? VeriMarkPackage.PackageException)?.message
-                        ?: "Export failed")
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    val exportProject = {
-        val currentCase = viewModel.currentCase.value
-        if (currentCase != null) {
-            exportPackagePicker.launch(
-                VeriMarkPackage.safeProjectFileName(currentCase.title) + VeriMarkPackage.EXTENSION
-            )
-        }
-    }
-
     val shareProject = {
         if (!isSharingProject) {
             isSharingProject = true
@@ -226,7 +203,7 @@ fun VideoReviewScreen(
                 try {
                     val file = viewModel.buildPackageFileForSharing()
                     if (file != null) {
-                        shareFile(context, file, "application/zip", "Share VeriMark Project")
+                        shareFile(context, file, VeriMarkPackage.MIME_TYPE, "Share VeriMark Project")
                     } else {
                         Toast.makeText(context, "Couldn't prepare project for sharing.", Toast.LENGTH_SHORT).show()
                     }
@@ -266,13 +243,6 @@ fun VideoReviewScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Export Project") },
-                                onClick = {
-                                    menuExpanded = false
-                                    exportProject()
-                                }
-                            )
-                            DropdownMenuItem(
                                 text = { Text("Share Project") },
                                 enabled = !isSharingProject,
                                 onClick = {
@@ -285,7 +255,14 @@ fun VideoReviewScreen(
                                 onClick = {
                                     menuExpanded = false
                                     importPicker.launch(
-                                        arrayOf("application/zip", "application/octet-stream", "application/json", "text/*", "*/*")
+                                        arrayOf(
+                                            VeriMarkPackage.MIME_TYPE,
+                                            "application/zip",
+                                            "application/octet-stream",
+                                            "application/json",
+                                            "text/*",
+                                            "*/*"
+                                        )
                                     )
                                 }
                             )

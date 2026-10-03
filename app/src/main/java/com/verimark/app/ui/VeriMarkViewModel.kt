@@ -14,6 +14,7 @@ import com.verimark.app.data.MarkerEntity
 import com.verimark.app.data.MediaType
 import com.verimark.app.data.ProjectBackup
 import com.verimark.app.data.VeriMarkDatabase
+import com.verimark.app.portable.VeriMarkImporter
 import com.verimark.app.portable.VeriMarkPackage
 import com.verimark.app.util.detectMediaType
 import com.verimark.app.util.readDisplayName
@@ -174,84 +175,11 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
     }
 
     /** Imports a portable .verimark package, returning the new case id. */
-    suspend fun importPackage(source: Uri): Long = withContext(Dispatchers.IO) {
-        val app = getApplication<Application>()
-        val importDir = File(app.filesDir, "verimark_import_${System.currentTimeMillis()}")
-        val raw: VeriMarkPackage.RawPackage = try {
-            app.contentResolver.openInputStream(source)?.use { input ->
-                VeriMarkPackage.readRaw(input, importDir)
-            } ?: throw VeriMarkPackage.PackageException("Cannot read the selected file.")
-        } catch (e: Exception) {
-            importDir.deleteRecursively()
-            if (e is VeriMarkPackage.PackageException) throw e
-            throw VeriMarkPackage.PackageException("This is not a valid VeriMark package.")
-        }
-        val project = VeriMarkPackage.projectFromJson(raw.projectJson)
-        val mediaUri = Uri.fromFile(raw.mediaFile).toString()
-        val title = project.title.ifBlank { "Imported Project" }
-        val now = System.currentTimeMillis()
-        val caseId = caseDao.insert(
-            CaseEntity(
-                title = title,
-                date = now,
-                videoUri = mediaUri,
-                mediaType = MediaType.fromStorage(project.mediaType)
-            )
-        )
-        if (project.markers.isNotEmpty()) {
-            markerDao.insertAll(
-                project.markers.map { m ->
-                    MarkerEntity(
-                        caseId = caseId,
-                        videoUri = mediaUri,
-                        positionMs = m.timestampMs,
-                        label = m.label,
-                        createdAt = if (m.createdAt > 0) m.createdAt else now
-                    )
-                }
-            )
-        }
-        _currentCase.value = CaseEntity(
-            id = caseId,
-            title = title,
-            date = now,
-            videoUri = mediaUri,
-            mediaType = MediaType.fromStorage(project.mediaType)
-        )
-        _selectedMediaUri.value = Uri.parse(mediaUri)
-        caseId
-    }
-
-    /** Exports the current project as a .verimark package to [destination]. */
-    suspend fun exportPackage(destination: Uri): Boolean = withContext(Dispatchers.IO) {
-        val app = getApplication<Application>()
-        val case = _currentCase.value ?: return@withContext false
-        val mediaUri = _selectedMediaUri.value ?: return@withContext false
-        val mediaName = readDisplayName(app, mediaUri) ?: "recording"
-        val mediaFileName = "${VeriMarkPackage.MEDIA_DIR}/$mediaName"
-        val project = VeriMarkPackage.PortableProject(
-            title = case.title,
-            mediaType = case.mediaType.name,
-            mediaFileName = mediaFileName,
-            markers = markers.value.map { m ->
-                VeriMarkPackage.PortableMarker(m.positionMs, m.label, m.createdAt)
-            }
-        )
-        val json = VeriMarkPackage.projectToJson(project)
-        val tempFile = File.createTempFile("verimark_export_", VeriMarkPackage.EXTENSION, app.cacheDir)
-        try {
-            tempFile.outputStream().use { out ->
-                app.contentResolver.openInputStream(mediaUri)?.use { mediaIn ->
-                    VeriMarkPackage.write(out, json, mediaFileName, mediaIn)
-                } ?: throw VeriMarkPackage.PackageException("Cannot read the current recording.")
-            }
-            app.contentResolver.openOutputStream(destination)?.use { dest ->
-                tempFile.inputStream().use { src -> src.copyTo(dest) }
-            } ?: throw VeriMarkPackage.PackageException("Cannot write the package.")
-            true
-        } finally {
-            tempFile.delete()
-        }
+    suspend fun importPackage(source: Uri): Long {
+        val result = VeriMarkImporter.import(getApplication(), source, caseDao, markerDao)
+        _currentCase.value = result.case
+        _selectedMediaUri.value = Uri.parse(result.mediaUri)
+        return result.caseId
     }
 
     /** Builds a .verimark package in the cache directory for sharing. */

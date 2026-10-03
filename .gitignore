@@ -16,6 +16,7 @@ local.properties
 *.aab
 captures/
 .cxx/
+app/release/
 
 # Misc
 .DS_Store

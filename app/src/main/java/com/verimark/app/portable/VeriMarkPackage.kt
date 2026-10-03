@@ -27,6 +27,7 @@ object VeriMarkPackage {
     const val FORMAT_VERSION = 1
     const val APP_NAME = "VeriMark"
     const val EXTENSION = ".verimark"
+    const val MIME_TYPE = "application/vnd.verimark.project"
     const val PROJECT_JSON = "project.json"
     const val MEDIA_DIR = "media"
 
