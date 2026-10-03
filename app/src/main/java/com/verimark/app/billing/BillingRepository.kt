@@ -7,6 +7,7 @@ import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesUpdatedListener
@@ -173,7 +174,10 @@ class BillingRepository private constructor(private val context: Context) {
     private fun createClient(): BillingClient =
         BillingClient.newBuilder(context)
             .setListener(purchasesUpdatedListener)
-            .enablePendingPurchases()
+            .enablePendingPurchases(
+                PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
+            )
+            .enableAutoServiceReconnection()
             .build()
 
     private fun queryProducts() {
@@ -197,10 +201,10 @@ class BillingRepository private constructor(private val context: Context) {
             )
             .build()
         try {
-            c.queryProductDetailsAsync(subsParams) { subsResult, subs ->
+            c.queryProductDetailsAsync(subsParams) { subsResult, subsDetails ->
                 val subList = try {
                     if (subsResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                        subs.orEmpty()
+                        subsDetails?.productDetailsList.orEmpty()
                     } else {
                         emptyList()
                     }
@@ -208,10 +212,10 @@ class BillingRepository private constructor(private val context: Context) {
                     emptyList()
                 }
                 try {
-                    c.queryProductDetailsAsync(inAppParams) { inAppResult, inApps ->
+                    c.queryProductDetailsAsync(inAppParams) { inAppResult, inAppDetails ->
                         val inAppList = try {
                             if (inAppResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                                inApps.orEmpty()
+                                inAppDetails?.productDetailsList.orEmpty()
                             } else {
                                 emptyList()
                             }
