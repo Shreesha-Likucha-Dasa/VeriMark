@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,13 +69,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProjectsListScreen(
     onProjectClick: (Long) -> Unit,
+    onOpenPro: () -> Unit,
     viewModel: ProjectsListViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val projects by viewModel.projects.collectAsState()
+    val isAtProjectLimit by viewModel.isAtProjectLimit.collectAsState()
     val scope = rememberCoroutineScope()
 
     var showAddSheet by remember { mutableStateOf(false) }
+    var showUpgradeDialog by remember { mutableStateOf(false) }
     var showNewDialog by remember { mutableStateOf(false) }
     var newTitle by remember { mutableStateOf("") }
     var pickedMedia by remember { mutableStateOf<Uri?>(null) }
@@ -103,7 +107,7 @@ fun ProjectsListScreen(
                 val result = runCatching { viewModel.importProject(uri) }
                 isImporting = false
                 result.onSuccess { id ->
-                    onProjectClick(id)
+                    if (id != null) onProjectClick(id) else showUpgradeDialog = true
                 }.onFailure { e ->
                     importError = (e as? VeriMarkPackage.PackageException)?.message
                         ?: "The file is corrupted, unsupported, or not a valid VeriMark project."
@@ -115,10 +119,21 @@ fun ProjectsListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("VeriMark Projects") })
+            TopAppBar(
+                title = { Text("VeriMark Projects") },
+                actions = {
+                    IconButton(onClick = onOpenPro) {
+                        Icon(Icons.Filled.Star, contentDescription = "Upgrade to Pro")
+                    }
+                }
+            )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddSheet = true }) {
+            FloatingActionButton(
+                onClick = {
+                    if (isAtProjectLimit) showUpgradeDialog = true else showAddSheet = true
+                }
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = "Add")
             }
         }
@@ -161,7 +176,11 @@ fun ProjectsListScreen(
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(24.dp))
-                    Button(onClick = { showAddSheet = true }) {
+                    Button(
+                        onClick = {
+                            if (isAtProjectLimit) showUpgradeDialog = true else showAddSheet = true
+                        }
+                    ) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Add")
@@ -274,7 +293,7 @@ fun ProjectsListScreen(
                     subtitle = "Choose a video or audio recording to review.",
                     onClick = {
                         showAddSheet = false
-                        showNewDialog = true
+                        if (isAtProjectLimit) showUpgradeDialog = true else showNewDialog = true
                     }
                 )
                 AddOptionRow(
@@ -290,14 +309,18 @@ fun ProjectsListScreen(
                     subtitle = "Open a previously exported or shared VeriMark project.",
                     onClick = {
                         showAddSheet = false
-                        importPicker.launch(
-                            arrayOf(
-                                VeriMarkPackage.MIME_TYPE,
-                                "application/zip",
-                                "application/octet-stream",
-                                "*/*"
+                        if (isAtProjectLimit) {
+                            showUpgradeDialog = true
+                        } else {
+                            importPicker.launch(
+                                arrayOf(
+                                    VeriMarkPackage.MIME_TYPE,
+                                    "application/zip",
+                                    "application/octet-stream",
+                                    "*/*"
+                                )
                             )
-                        )
+                        }
                     }
                 )
             }
@@ -367,7 +390,7 @@ fun ProjectsListScreen(
                             showNewDialog = false
                             newTitle = ""
                             pickedMedia = null
-                            onProjectClick(id)
+                            if (id != null) onProjectClick(id) else showUpgradeDialog = true
                         }
                     }
                 ) {
@@ -384,6 +407,18 @@ fun ProjectsListScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    if (showUpgradeDialog) {
+        UpgradePromptDialog(
+            title = "You've reached the free limit",
+            message = "VeriMark Free includes up to 3 projects. Upgrade to Pro for unlimited projects and professional PDF reports.",
+            onViewPro = {
+                showUpgradeDialog = false
+                onOpenPro()
+            },
+            onDismiss = { showUpgradeDialog = false }
         )
     }
 

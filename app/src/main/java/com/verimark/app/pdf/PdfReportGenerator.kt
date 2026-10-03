@@ -37,11 +37,26 @@ private val dividerPaint = Paint().apply {
     strokeWidth = 1f
 }
 
+private val watermarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    color = Color.GRAY
+    textSize = 10f
+    typeface = Typeface.DEFAULT
+    textAlign = Paint.Align.CENTER
+}
+
 /**
  * Generates a local PDF report using the native [PdfDocument] Canvas API.
  * No external PDF libraries and no network access.
+ *
+ * Free reports carry a subtle "Created with VeriMark" footer on every page;
+ * Pro reports ([includeWatermark] = false) are completely clean.
  */
-fun generatePdfReport(context: Context, case: CaseEntity, markers: List<MarkerEntity>): File {
+fun generatePdfReport(
+    context: Context,
+    case: CaseEntity,
+    markers: List<MarkerEntity>,
+    includeWatermark: Boolean
+): File {
     val document = PdfDocument()
     var page = newPage(document)
     var canvas = page.canvas
@@ -49,6 +64,7 @@ fun generatePdfReport(context: Context, case: CaseEntity, markers: List<MarkerEn
 
     markers.forEachIndexed { index, marker ->
         if (y > PAGE_HEIGHT - MARGIN - LINE_HEIGHT) {
+            drawFooter(canvas, includeWatermark)
             document.finishPage(page)
             page = newPage(document)
             canvas = page.canvas
@@ -59,6 +75,7 @@ fun generatePdfReport(context: Context, case: CaseEntity, markers: List<MarkerEn
         y += LINE_HEIGHT
     }
 
+    drawFooter(canvas, includeWatermark)
     document.finishPage(page)
 
     val file = File(context.cacheDir, "VeriMark_Report_${System.currentTimeMillis()}.pdf")
@@ -73,13 +90,25 @@ private fun newPage(document: PdfDocument): PdfDocument.Page =
     document.startPage(PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, 1).create())
 
 private fun drawHeader(canvas: Canvas, case: CaseEntity, markerCount: Int): Float {
-    canvas.drawText("VeriMark - Incident Report", MARGIN, MARGIN + 8f, titlePaint)
+    canvas.drawText("VeriMark Report", MARGIN, MARGIN + 8f, titlePaint)
     canvas.drawText("Case: ${case.title}", MARGIN, MARGIN + 30f, bodyPaint)
     val formattedDate = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(case.date))
     canvas.drawText("Date: $formattedDate", MARGIN, MARGIN + 50f, bodyPaint)
     canvas.drawText("Total markers: $markerCount", MARGIN, MARGIN + 70f, bodyPaint)
     canvas.drawLine(MARGIN, MARGIN + 80f, PAGE_WIDTH - MARGIN, MARGIN + 80f, dividerPaint)
     return MARGIN + 100f
+}
+
+/** Draws a small, tasteful footer on the page, outside the content area. */
+private fun drawFooter(canvas: Canvas, includeWatermark: Boolean) {
+    if (includeWatermark) {
+        canvas.drawText(
+            "Created with VeriMark",
+            PAGE_WIDTH / 2f,
+            PAGE_HEIGHT - 20f,
+            watermarkPaint
+        )
+    }
 }
 
 /** Shares the generated PDF via a FileProvider-backed ACTION_SEND intent. */

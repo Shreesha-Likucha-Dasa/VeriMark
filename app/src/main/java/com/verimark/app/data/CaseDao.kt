@@ -24,6 +24,9 @@ interface CaseDao {
     @Delete
     suspend fun deleteCase(caseEntity: CaseEntity)
 
+    @Query("SELECT COUNT(*) FROM cases")
+    suspend fun caseCount(): Int
+
     @Query("UPDATE cases SET videoUri = :videoUri, mediaType = :mediaType WHERE id = :caseId")
     suspend fun updateMedia(caseId: Long, videoUri: String, mediaType: MediaType)
 }

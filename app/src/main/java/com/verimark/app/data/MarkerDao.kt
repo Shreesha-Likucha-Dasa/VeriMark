@@ -21,6 +21,9 @@ interface MarkerDao {
     @Query("DELETE FROM markers WHERE caseId = :caseId")
     suspend fun clearAllMarkers(caseId: Long)
 
+    @Query("SELECT COUNT(*) FROM markers WHERE caseId = :caseId")
+    suspend fun markerCount(caseId: Long): Int
+
     @Query("SELECT videoUri FROM markers WHERE caseId = :caseId ORDER BY positionMs ASC LIMIT 1")
     suspend fun firstMarkerVideoUri(caseId: Long): String?
 

@@ -69,7 +69,8 @@ fun AppNavHost(
     NavHost(navController = navController, startDestination = "projects") {
         composable("projects") {
             ProjectsListScreen(
-                onProjectClick = { caseId -> navController.navigate("review/$caseId") }
+                onProjectClick = { caseId -> navController.navigate("review/$caseId") },
+                onOpenPro = { navController.navigate("pro") }
             )
         }
         composable(
@@ -79,8 +80,12 @@ fun AppNavHost(
             val caseId = backStackEntry.arguments?.getLong("caseId") ?: return@composable
             VideoReviewScreen(
                 caseId = caseId,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenPro = { navController.navigate("pro") }
             )
+        }
+        composable("pro") {
+            ProScreen(onBack = { navController.popBackStack() })
         }
     }
 }

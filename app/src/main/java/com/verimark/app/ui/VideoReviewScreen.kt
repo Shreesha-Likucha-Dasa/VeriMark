@@ -83,6 +83,7 @@ import kotlinx.coroutines.launch
 fun VideoReviewScreen(
     caseId: Long,
     onBack: () -> Unit,
+    onOpenPro: () -> Unit,
     viewModel: VeriMarkViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -91,6 +92,9 @@ fun VideoReviewScreen(
     val case by viewModel.currentCase.collectAsState()
     val mediaUri by viewModel.selectedMediaUri.collectAsState()
     val markers by viewModel.markers.collectAsState()
+    val entitlement by viewModel.entitlement.collectAsState()
+    val isAtMarkerLimit by viewModel.isAtMarkerLimit.collectAsState()
+    val isPro = entitlement.isPro
 
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
@@ -105,6 +109,7 @@ fun VideoReviewScreen(
     var showReplaceDialog by remember { mutableStateOf(false) }
     var pendingReplacementUri by remember { mutableStateOf<Uri?>(null) }
     var isSharingProject by remember { mutableStateOf(false) }
+    var showUpgradeDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(caseId) {
@@ -191,7 +196,7 @@ fun VideoReviewScreen(
     val exportPdf = {
         val currentCase = viewModel.currentCase.value
         if (currentCase != null) {
-            val file = generatePdfReport(context, currentCase, viewModel.markers.value)
+            val file = generatePdfReport(context, currentCase, viewModel.markers.value, includeWatermark = !isPro)
             sharePdf(context, file)
         }
     }
@@ -281,9 +286,13 @@ fun VideoReviewScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = {
-                    capturedPositionMs = player.currentPosition
-                    player.pause()
-                    showLabelDialog = true
+                    if (isAtMarkerLimit) {
+                        showUpgradeDialog = true
+                    } else {
+                        capturedPositionMs = player.currentPosition
+                        player.pause()
+                        showLabelDialog = true
+                    }
                 },
                 icon = { Icon(Icons.Filled.Flag, contentDescription = null) },
                 text = { Text("MARK MOMENT") },
@@ -395,6 +404,18 @@ fun VideoReviewScreen(
                 }
             }
         }
+    }
+
+    if (showUpgradeDialog) {
+        UpgradePromptDialog(
+            title = "You've reached the free limit",
+            message = "VeriMark Free includes up to 20 markers per project. Upgrade to Pro for unlimited markers and watermark-free PDF reports.",
+            onViewPro = {
+                showUpgradeDialog = false
+                onOpenPro()
+            },
+            onDismiss = { showUpgradeDialog = false }
+        )
     }
 
     if (isSharingProject) {

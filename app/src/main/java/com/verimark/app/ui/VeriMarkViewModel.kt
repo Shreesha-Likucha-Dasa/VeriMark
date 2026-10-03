@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import com.verimark.app.billing.BillingRepository
+import com.verimark.app.billing.EntitlementState
 import com.verimark.app.data.CaseDao
 import com.verimark.app.data.CaseEntity
 import com.verimark.app.data.MarkerDao
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -54,6 +57,21 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
             if (case == null) flowOf(emptyList()) else markerDao.markersForCase(case.id)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val billing = BillingRepository.get(application)
+
+    /** The current Pro entitlement, driven by Google Play purchase state. */
+    val entitlement: StateFlow<EntitlementState> = billing.entitlement
+
+    /** True when the open case has reached the free marker limit. */
+    val isAtMarkerLimit: StateFlow<Boolean> =
+        combine(entitlement, markers) { ent, marks ->
+            ent !is EntitlementState.Pro && marks.size >= BillingRepository.MARKER_LIMIT
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    init {
+        billing.start()
+    }
 
     /** Loads the case with [caseId], restoring its video URI and marker list. */
     fun loadCase(caseId: Long) {
@@ -93,6 +111,11 @@ class VeriMarkViewModel(application: Application) : AndroidViewModel(application
         val uri = _selectedMediaUri.value ?: return
         val positionMs = player?.currentPosition ?: 0L
         viewModelScope.launch {
+            if (!entitlement.value.isPro &&
+                markerDao.markerCount(case.id) >= BillingRepository.MARKER_LIMIT
+            ) {
+                return@launch
+            }
             markerDao.insert(
                 MarkerEntity(
                     caseId = case.id,
