@@ -106,9 +106,7 @@ fun ProjectsListScreen(
                 isImporting = true
                 val result = runCatching { viewModel.importProject(uri) }
                 isImporting = false
-                result.onSuccess { id ->
-                    if (id != null) onProjectClick(id) else showUpgradeDialog = true
-                }.onFailure { e ->
+                result.onSuccess { id -> onProjectClick(id) }.onFailure { e ->
                     importError = (e as? VeriMarkPackage.PackageException)?.message
                         ?: "The file is corrupted, unsupported, or not a valid VeriMark project."
                     showImportError = true
@@ -129,11 +127,7 @@ fun ProjectsListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (isAtProjectLimit) showUpgradeDialog = true else showAddSheet = true
-                }
-            ) {
+            FloatingActionButton(onClick = { showAddSheet = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "Add")
             }
         }
@@ -176,11 +170,7 @@ fun ProjectsListScreen(
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(24.dp))
-                    Button(
-                        onClick = {
-                            if (isAtProjectLimit) showUpgradeDialog = true else showAddSheet = true
-                        }
-                    ) {
+                    Button(onClick = { showAddSheet = true }) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Add")
@@ -309,18 +299,14 @@ fun ProjectsListScreen(
                     subtitle = "Open a previously exported or shared VeriMark project.",
                     onClick = {
                         showAddSheet = false
-                        if (isAtProjectLimit) {
-                            showUpgradeDialog = true
-                        } else {
-                            importPicker.launch(
-                                arrayOf(
-                                    VeriMarkPackage.MIME_TYPE,
-                                    "application/zip",
-                                    "application/octet-stream",
-                                    "*/*"
-                                )
+                        importPicker.launch(
+                            arrayOf(
+                                VeriMarkPackage.MIME_TYPE,
+                                "application/zip",
+                                "application/octet-stream",
+                                "*/*"
                             )
-                        }
+                        )
                     }
                 )
             }
@@ -385,9 +371,9 @@ fun ProjectsListScreen(
                     enabled = pickedMedia != null,
                     onClick = {
                         val uri = pickedMedia ?: return@TextButton
+                        showNewDialog = false
                         scope.launch {
                             val id = viewModel.createProject(newTitle, uri)
-                            showNewDialog = false
                             newTitle = ""
                             pickedMedia = null
                             if (id != null) onProjectClick(id) else showUpgradeDialog = true
@@ -412,8 +398,8 @@ fun ProjectsListScreen(
 
     if (showUpgradeDialog) {
         UpgradePromptDialog(
-            title = "You've reached the free limit",
-            message = "VeriMark Free includes up to 3 projects. Upgrade to Pro for unlimited projects and professional PDF reports.",
+            title = "You've used your 3 free projects",
+            message = "You've reached the free project creation limit. Upgrade to VeriMark Pro for unlimited projects, unlimited markers and watermark-free PDF reports.",
             onViewPro = {
                 showUpgradeDialog = false
                 onOpenPro()
